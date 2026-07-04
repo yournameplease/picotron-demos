@@ -1,0 +1,423 @@
+picotron cartridge // www.picotron.net
+version 2
+
+:: gfx/
+:: map/
+:: sfx/
+:: main.lua
+--[[pod_format="raw",created="2026-07-04 15:43:17",modified="2026-07-04 18:16:16",revision=153,xstickers={}]]
+-- ynp
+
+SCREEN_W = 480
+SCREEN_H = 270
+
+SPEED_MIN = 1
+SPEED_MAX = 2
+SPEED_JITTER = 1
+T_MIN = 30
+T_MAX = 60
+T_JITTER = 30
+GRAV_MIN = 0.01
+GRAV_MAX = 0.03
+
+FIREWORK_SPAWN_COUNT_MIN = 2
+FIREWORK_SPAWN_COUNT_MAX = 5
+FIREWORK_SPAWN_MIN = 30
+FIREWORK_SPAWN_MAX = 90
+FIREWORK_X_MIN = 20
+FIREWORK_X_MAX = SCREEN_W - 20
+
+BURST_LAYERS_MIN = 1
+BURST_LAYERS_MAX = 5
+BURST_LAYER_COUNT = 64
+
+FLOWER_SPIKES_MIN = 4
+FLOWER_SPIKES_MAX = 8
+FLOWER_SPIKE_COUNT = 64
+
+STAR_SPIKES_MIN = 4
+STAR_SPIKES_MAX = 7
+STAR_SPIKE_COUNT = 64
+
+PARTICLES_MAX = 2048 << 2
+
+PARTICLE_X_COL = 0
+PARTICLE_Y_COL = 1
+PARTICLE_C_COL = 2
+PARTICLE_DX_COL = 3
+PARTICLE_DY_COL = 4
+PARTICLE_DDY_COL = 5
+PARTICLE_FRICX_COL = 6
+PARTICLE_FRICY_COL = 7
+PARTICLE_T_COL = 8
+
+PARTICLE_W = 9
+
+local RAINBOW = {
+    { 8,  24 },
+    { 9,  25 },
+    { 10, 31 },
+    { 11, 27 },
+    { 28, 12 },
+    { 16, 1 },
+    { 29, 18 },
+    { 14, 30 },
+}
+
+local TRAIL_COLOR = {
+--	8, 9, 10
+24, 25
+}
+
+function rndr(min, max)
+	return min + rnd(max - min)
+end
+
+function rndr_normal(min, max)
+	out = min
+	for i = 1, 10 do
+		out += rnd(max - min) / 10
+	end
+	return out
+end
+
+function rndi(n)
+	return rnd(n) // 1
+end
+
+function rndri(min, max)
+	return min + rndi(max-min)
+end
+
+local particles = userdata("f64", PARTICLE_W, PARTICLES_MAX)
+local particles_count = 0
+
+local fireworks = {}
+local firework_timer = 10
+
+function _init()
+	window{
+		cursor = 0
+	}
+end
+
+function firework_spawn()
+	local f = {
+		x = rndr(FIREWORK_X_MIN, FIREWORK_X_MAX),
+		y = SCREEN_H + 10,
+		dy = -1 - rnd(3),
+		t = 30 + rndi(30),
+		burst_func = rnd(burst_funcs)
+	}
+	add(fireworks, f)
+end
+
+function roll_color()
+	return RAINBOW[rndi(#RAINBOW)+1][1]
+end
+function roll_trail_color()
+	return TRAIL_COLOR[rndi(#TRAIL_COLOR)+1]
+end
+
+function firework_burst(f)
+	local base_speed = rndr(SPEED_MIN, SPEED_MAX)
+	local base_t = rndr(T_MIN, T_MAX)
+	local layers = rndri(BURST_LAYERS_MIN,BURST_LAYERS_MAX)
+	local grav = rndr(GRAV_MIN, GRAV_MAX)
+	local layer_color = roll_color()
+	
+	for layer = 1, layers do
+		local layer_speed = base_speed * layer / layers
+		for i = 1, BURST_LAYER_COUNT do
+			local ang = i / 32
+			local speed = layer_speed + rnd(SPEED_JITTER)
+			local t = base_t + rnd(T_JITTER)
+			particle_spawn{
+				x = f.x,
+				y = f.y,
+				c = layer_color,
+				dx = speed * cos(ang),
+				dy = speed * sin(ang) - 1,
+				ddy = grav,
+				fric_x = .98,
+				fric_y = .98,
+				t = t,
+			}
+		end
+	end
+end
+
+function firework_flower(f)
+	local rot = rnd(1)
+	local spikes = rndri(FLOWER_SPIKES_MIN, FLOWER_SPIKES_MAX)
+	local base_speed = rndr(SPEED_MIN, SPEED_MAX)
+	local base_t = rndr(T_MIN, T_MAX)
+	local grav = rndr(GRAV_MIN, GRAV_MAX)
+	local layer_color = roll_color()
+	
+	local ang_step = 1 / spikes
+	for layer = 1, spikes do
+		local base_ang = rot + layer / spikes
+		for i = 1, FLOWER_SPIKE_COUNT do
+			local offset = rndr(-1, 1)
+			local scale = 1 - abs(offset)
+			local ang = base_ang + offset * ang_step
+			local speed = scale * (base_speed + rnd(SPEED_JITTER))
+			local t = base_t + rnd(T_JITTER)
+			particle_spawn{
+				x = f.x,
+				y = f.y,
+				c = layer_color,
+				dx = speed * cos(ang),
+				dy = speed * sin(ang) - 1,
+				ddy = grav,
+				fric_x = .98,
+				fric_y = .98,
+				t = t,
+			}
+		end
+	end
+end
+
+function firework_star(f)
+	local rot = rnd(1)
+	local spikes = rndri(FLOWER_SPIKES_MIN, FLOWER_SPIKES_MAX)
+	local base_speed = rndr(SPEED_MIN, SPEED_MAX)
+	local base_t = rndr(T_MIN, T_MAX)
+	local grav = rndr(GRAV_MIN, GRAV_MAX)
+	local layer_color = roll_color()
+	
+	local ang_step = 1 / spikes
+	for layer = 1, spikes do
+		local base_ang = rot + layer / spikes
+		for i = 1, FLOWER_SPIKE_COUNT do
+			local offset = rndr(-0.5, 0.5)
+			local scale = 1 - abs(offset)
+			local ang = base_ang + offset * ang_step
+			local speed = scale * (base_speed + rnd(SPEED_JITTER))
+			local t = base_t + rnd(T_JITTER)
+			particle_spawn{
+				x = f.x,
+				y = f.y,
+				c = layer_color,
+				dx = speed * cos(ang),
+				dy = speed * sin(ang) - 1,
+				ddy = grav,
+				fric_x = .98,
+				fric_y = .98,
+				t = t,
+			}
+		end
+	end
+end
+
+burst_funcs = {
+	firework_burst,
+	firework_flower,
+	firework_star,
+}
+
+function fireworks_update()
+	local i = 1
+	while i <= #fireworks do
+		f = fireworks[i]
+		
+		f.y += f.dy
+		f.t -= 1
+		if f.t <= 0 then
+			f:burst_func()
+			deli(fireworks, i)
+		else
+			if f.t % 2 == 0 then
+				for i = 1, 8 do
+					local c = roll_trail_color()
+					particle_spawn{
+						x = f.x,
+						y = f.y,
+						c = c,
+						dx = rndr_normal(-0.5, 0.5),
+						dy = rndr(0.4, 0.6),
+						ddy = 0.01,
+						fric_x = .95,
+						fric_y = .95,
+						t = 30,
+					}
+				end
+			end
+		
+			i += 1
+		end
+	end
+end
+
+function particle_spawn(p)
+	if particles_count >= PARTICLES_MAX then
+		return
+	end
+	
+	particles:set(0, particles_count, 
+		p.x,
+		p.y, 
+		p.c,
+		p.dx,
+		p.dy,
+		p.ddy,
+		p.fric_x,
+		p.fric_y,
+		p.t
+	)
+	particles_count += 1
+end
+
+function particles_update()
+	particles:add(particles, true, PARTICLE_DDY_COL, PARTICLE_DY_COL, 1, PARTICLE_W, PARTICLE_W, particles_count)
+	particles:mul(particles, true, PARTICLE_FRICX_COL, PARTICLE_DX_COL, 1, PARTICLE_W, PARTICLE_W, particles_count)
+	particles:mul(particles, true, PARTICLE_FRICY_COL, PARTICLE_DY_COL, 1, PARTICLE_W, PARTICLE_W, particles_count)
+	particles:add(particles, true, PARTICLE_DX_COL, PARTICLE_X_COL, 1, PARTICLE_W, PARTICLE_W, particles_count)
+	particles:add(particles, true, PARTICLE_DY_COL, PARTICLE_Y_COL, 1, PARTICLE_W, PARTICLE_W, particles_count)
+	particles:sub(1, true, 0, PARTICLE_T_COL, 1, PARTICLE_W, PARTICLE_W, particles_count)
+	
+	local i = 0
+	while i < particles_count do
+		if particles:get(PARTICLE_T_COL, i) <= 0 then
+			particles:copy(particles, true, (particles_count-1) * PARTICLE_W, i * PARTICLE_W, 1, 1, 1, PARTICLE_W) 
+			particles_count -= 1
+		else
+			i += 1
+		end
+	end
+end
+
+function _update()
+	firework_timer -= 1
+	if firework_timer <= 0 then
+		local count = rndri(FIREWORK_SPAWN_COUNT_MIN, FIREWORK_SPAWN_COUNT_MAX)
+		for i = 1, count do
+			firework_spawn()
+		end
+		firework_timer = rndri(FIREWORK_SPAWN_MIN, FIREWORK_SPAWN_MAX)
+	end
+	
+	fireworks_update()
+	particles_update()
+end
+
+function _draw()
+	cls(0)
+	for f in all(fireworks) do
+		--circfill(f.x, f.y, 3, 7)
+	end
+	pset(particles, 0, particles_count, 3, PARTICLE_W)
+	--color(6)
+	--print(particles_count)
+	--print(stat(1))
+end
+:: .info.pod
+--[[pod,created="2026-05-26 21:14:32",modified="2026-07-04 18:16:16",runtime=27,workspaces={{location="main.lua#59,22",workspace_index=1},{location="gfx/0.gfx",workspace_index=2}}]]
+:: gfx/.info.pod
+--[[pod,created="2026-05-26 21:14:32",modified="2026-07-04 18:16:16"]]
+:: gfx/0.gfx
+b64$LS1bW3BvZCxjcmVhdGVkPSIyMDI1LTAxLTE3IDEwOjM1OjQ4Iixtb2RpZmllZD0iMjAyNS0w
+MS0xNyAxMDozNzo0NCIscmV2aXNpb249Ml1dbHo0AH4AAAASMQAA8yF7WzBdPXtibXA9cHh1AEMg
+EBAE8FYHEAfAF9AXwAcQB-BWLGZsYWdzPTAscGFuX3gIAMt5PTAsem9vbT04fSw_AB-wMQD-----
+-----------------------------------------------------------XUG09OH19
+:: label.qoi
+b64$cW9pZgAAAeAAAAEOBAH9-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39
+-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39
+-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39
+-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39
+5v4kY7D_AAAA-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-cAgNf39-f39-f3kIDXEIDXS
+IDX9-f39-f392SA1-f39-f39-ekgNcAgNc0gNf39-f39-f3YIDXBIDXJIDXAIDX9-f39-f390CA1
+wyA1-f39-f39-fggNf39-f39-f3lIDXEIDXCIDUgNf39-f39-f3sIDX9-f39-f395iA1xCDANf39
+-f39-f3UIDXCIDXDIDX9-f39-f392CA1ySA1wiA1wSA1-f39-f39-dcgNc0gwTUgNf39-f39-f3j
+IMA1IDX9-f39-f395yA1-f39-f39-c0gNc4gNcMgNcUgNSDANSA1wiA1wiA1-f39-f39-cwgNSA1
+zCDANckgNf39-f39-f3DIDXFIDXEIDXIIDUgNcwgNf39-f39-f3LIDXBIME1xiDANcsgNf39-f39
+-f3IIDXEIDXBIMA10SA1wCA1-f39-f39-cAgNc8gwDUgwDXCIDXAIMA1yiDANcAgNf39-f39-fgg
+NSA10CDANcMgwjXFIDUgNcEgNcQgNf39-f39-f3NIME1wSA1IMA1wyA1IDUgNSA1xyA1-f39-f39
+-CA1wCA1yyA1wiDANcEgNcIgNcggNcUgNf39-f39-f3FIMA1wSA1IDXCIDXAIDUgwDXSIDX9-f39
+-f3wIDXFIDUgNcsgwDXAIDXDIDXJIDXFIDXAIDX9-f39-f30IDUgNcwgwDUgwDXAIDXCIDXYIDX9
+-f39-f35IDUgNcEgwTUgwzXBIME10SA1-f39-f39_yA1wiDANSA1wCDBNcAgwDUgwjXOIDX9-f39
+-f39xCA1xiDANcQgwjUgwzX9-f39-f390iA1wiDBNcAgNcAgNSDANSA1IDXCIME1-f39-f39-dEg
+wDXCIME1IDXBIDUgwDUgwTXCIDUgNSA1wiA1wyA1-f39-f39-cIgNcogNcMgwjXBIDXEIDXAIDX9
+-f39-f39xyA1wCA1xiDANcAgwDXAIDXCIMA1IDXAIDXBIDX9-f39-f39xSA1zyDANcEgNcIgwDUg
+wDXBIDUgNSA1-f39-f39-ccgNcggNcAgNcMgNcYgNcMgNf39-f39-f0gNc8gNSA1IDXBIDUgwDXH
+IDX9-f39-f39yCA1zSA1xCA1IDXJIDX9-f39-f391SDANcMgwDUgNcggNf39-f39-f3gIMA1yiA1
+-f39-f39-c0gNcAgNcAgNcYgwjXFIDX9-f39-f39wCA1xCA1IDXDIDXBIDXKIMA1-f39-f39wv4A
+5DY1-c8gNcogNccgNSA1wCA1-f39-f39-cogNcYgNcIgNSA1yCA1IDX9-f39-f391yA1wCA1wiA1
+IDXEIDUgNcAgNcEgNcggNf39-f39-fggNcMgNSA1IDXZIMA1wSA1wCA1-f39-f39-c8gNcEgwDXB
+IDXSIDX9-f39-f392CDANcUgNf39-f39_SM1-dogNcggNcggNf39-f39-f3eIDXFIDXCIDXAIDX9
+-f39-f392CA10CDANSA1-f39-f39-e4gNf39-f39-f3LIDXYIDX9-f39-f390CA13iA1-f39-f39
+-c0gNf39-f39-cUjNSM1-eIgNf39-f39-cIjNf3iIDX9-f39-f3PIzX93yA1wP7iaxPANf39-f39
+-f3nNzUg-rkAPjX9-f39-f395CA1wxI3EjX9-f39-f39-f39-f395iM1ySM1-f39-f39-f39zyA1
+-f39-f39-f39-f39-f39-f39-f391yM1-fUSNf39-f39-f39-f39-f39-dcSwDcSNxI1-f39-f39
+IzXIIzX9-f39-f395yM1-f39-f39-fIjNf39-f39-f39-f39-f39-SM11yM1-f39-f39-dwjNf3o
+NxI1-f39-f39-eoSNTfANf39-f39-f3rEjX9-f39-f3WIzX90hI1-f39-f39-f39-f39-CM1-f39
+-f39-ecjNf39-f39-f39-f39-f39-f3GI8A13yM13SM1-f39-f395iM1-f39-f39-f3sIzXSIzX9
+2yM1wyM1-f39-f39-f3BIzX9-f3nIzXuIzXcIzX9-c0jNc8jNcojNf39-e4jNewjNf3JIzXMIzX9
+2SM1-f39-SM1-f399CM1-f39-d0jNf39_CM1-f39-f39-dcjNdIjNdsjNf39-f39-f3BIzXEIzX9
+-f399yM15iM1IzXIIzX9-f39-f3sIzXqIzXCIzXHIzXfIzX9yiM1ziM1wiM1-f399SM1-esjNf34
+IzXOIzX9-f39wiM14SPANf396SPANcojNcEjNcYjwDXNIzX9-f3lIzX9yyM1-fYjNdojNcEjNcEj
+Nf39-f3lIzXuI8A1zSM1-fEjNc0jNf39-fkjNf3xIzX92iM1wiM1xSM1xCM1zCM1-f398yM15yM1
+-f34IzXKIzX9-f39-cEjNf390SM10iM1-f39-d8jNdkjNcMjNf395SM10CM1-f39-eYjNf37IzXj
+IzXFIzXDIzX9-f3zIzX9-f3YIzXAIzXHIzXLIzX9-f3yIzXjIzXFIzX9-dUjNc0jNckjNdkjNf39
+-d4jNc0jNdwjNcYjNSM1-fH_-_wnNeEjNcYjNeUjNf39-eIjNckjNf31IzX92CM12SM1xiM1-f39
+-e8jNcgjNeAjNf3oIzX9-f390iM14iM1xSPANf398SM1xSM1xCM1-f397SM1-cEjNf39xSM1yyPA
+NcYjNcwjNdUjNf39-d4jNesjNccjNf3DIzXxHzXXI8A18yM1-f39-f3bHzX94yM12yM1wSM1-f39
+7SM18CPANcQjNcgjNSM1-f3HIzX9-f39-cQjNfkjNf3qIzUjNc4jNcUjNf39-f3iIzX9-f39-f39
+9iM1wiPANcYjNf33IzXEIzXBIzUjNcAjNdkjNcQjwDXKI8A1-f398SM12yM1zCM1yCM1-f39-f39
+-dMjNccjNcAjNccjNf391iM1zCM1-f39-eojwDXJIzXGIzX9-c8jNf39-f392SM1-f3KIzXZIzXJ
+IzX9-f398yM1-f3GIzXAIzXIIzXBIzXZI8A1IzX9-f393SM18SM1-eEjNeQjNf39-f3oIzXFIzXG
+IzX9-eojNdYjNf39-eUjNcUjNcojNcojNcAjwTXJIzXEI8A1-cwfNf0jNdMjNSM1yyM1-f39-c8j
+NcAjNcMjNcojNcIjNcgjNcEjwDXBIzX3HzX9zCM1wSM1zCM1IzXCIzXEIzX9-f393yM1I8A1IzXC
+IzXGIzXAIzXBIzXDIzXDIzXCIzXNIzX93iM1-f39-f3SIzXGIzXQIzXBIzXRIzX93iM1xyM1zSM1
+zSM1xyM1-f39-SM13yPBNcAjNd8jNcIfNd0fNf3CIzXGIzXDIzXaIzXJIzX9-f394CPANeQjNf3B
+HzX4IzXAIzXFIzXHIzX9-f39xSM1wiM13CPANSPANf395CM1wiM1ySM1-f39-c4jNSM13iM1-cof
+Nf3gIzXFIzX9-f39xSM1wSM15yM1IzXSI8A1IzX98SM1yiM1yCM1-f39-ecjNcEjNcAjNSPBNcMj
+NckjNSM1zSM1IzXFIzUjNcEjNd8fwDX9yiM13yM1xSM1-f39-cwjNccjNdEjNcEjNcEjNccjNSM1
+wCM1yCM1IzXEHzXWHzX90SM1xSM1xCM1-f39-fojNcwjwTXXIzXEIzX96CM1wiM10SM1-f39-f39
+wh81-c0jNcIjNckjNf39-f34IzXyIzX91SM1xiM1ySM1xiM1-f39-fMjNcYjNccjNf0fNeAfNf3E
+IzXCIzX9-f398CM1-ckfNcQfNf3LIzX9-f39-ccjNcEjNecjNdkfNf3PIzXLEjU3NcEjwDXCIzX9
+-f398SM1yiM13iM1_B815SM11TfAEjX9-f37IzX9wCM1-e4fNfM3EjXXIzX9-f395SPANf3kHzX9
+IzXIIzX9-f39wiM16SM17R81wCM1-fIjNdUjNf39-f399B81-d4SNcASNf39-f33I8A1xSPANcYj
+NeMfNf3yN8A1wyM1-f399SM1xSM1wiM14CM1_h817x81-cIjNcMSNcojNf39-f392B81yx81xB81
+-f39-f393yM1xSM1ySM1IzXkHzXHHzXBHzX9-f39-e8jNeYjNeAjNeQfNeUfNcEfNf3CNxLANzX9
+-f38IzX9zSM19h81xB810B81wB81-RI1wRI1-f39-f390h810R81yh816iM1wjc1wBI1-f39-f38
+IzX9-f39-f3hIzXSIzXBIzX9-f39-f39yCM12SM1-f39-f394yM15yM1-d4fNf39-f39-f3EHzXS
+HzXPHzX9-f39-f3tI8A1wCM14SM1-f39-f37IzXZIzXEIzXdIzXFHzXwHzXAHzXAHzXKHzX9-f39
+-esjNcsjNd0jNfYfNf39-f39_CM10SPANSM13yM1-f39-f39_yM17SM1-cAfNf39-f391iM1zyM1
+wSM1xSM1-c8jNf39-f39-eYjNfEjNcAjwDXZHzX9-f39-f396R81xx81-f39-f3sIzXAIzXKIzX0
+IzXsIzXAIx81zB81-f39-f395CM1wiM1zSM10x81xiM1wx814h81-f39-f3HIzX3Ejc1wB81-B81
+xR812B81yx81-f39-fUjNcsjNfIjNdQjNdIfNf39-f39-f3NIzX9-f39-f39-cAjNdofNf39-f39
+0SM1zSM1-ewjNcIfNcYfNf39-f395yM16yM1-f39-f39-SM1-cM3NcMjNc8jNcQjNSM14R81-f39
+-f39xSM13DfANewjNf39-f39-f3tHzXZHzX9-f39-f3EIzX9-f39-f39-cAjNcYjNf3NHzX9-f39
+-f30HzX9-f39-f3qIzXJIzX9-f39-f39-cI3EjXBIzX94R81-f39-f39whLANf39-f39-f393x81
+2h815h81-f39-f3qIzXCIzX95x81-f39-f3qIzXiHzX9-f39-f37IzX98R81-f39-f39-R81-f39
+-f39-cISNzXvHzX9-f39-f3ZIzXaEsA11B81zh813R81-f39-f39-f39-f39-f3VIzX9-f39-f39
+1yM1xyM1-f39-f39-dQjNf39-f39-f39yhI1-f39-f39-dQjNcojNcY3EjX9-f39-f396xI1-f39
+-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f39-f3XIzXNEsE1-f39-f39-dUjNdI3Nf39
+-f39-f3fIzX2HzX9-f39-f3qIzX9zRI1-f39-f391CM1-f39-f39-f39-f39-f397SM1-f39-f39
+-eAjNc43wBI19xLANf39-f39-dcjNdM3Nf0fNf39-f39-f39-f39-f39-f39-f39-f39xhLANf39
+-f39-f3qEjX9-f39-f3wEjX9-f39-f393SM1yhLANf39-f39-f3pNzX5EjXEHzXCHzX9-f39-f39
+3jcSNf39-f39-f39-f39-f39-f39-f39-f39yjcSwDX9-f39-f3sEjUSNfY3wTX9-doSNf39-f3P
+EjXAEjX9-f39-f39-f399zc1-f39-f3ZEjc1-f3bNxI1-f39-f3KN8ASNzX9-f39-f396Dc1-f3Q
+EjXKNxI1-f39-c0SNcASNf39-dc3EjX9-f39-cs3wDX9-c43Nf39-f3bEjfANfcSwDc1-f3MEjfA
+NckSwDX9-f39-cs3Nf393BI3Nf39-f39-f3cN8A1-f39-f3aEjX9-c43EjXJN8A1-f39-f3LEjU3
+Nf392Tc1-f39-dE3NfcSwDX9-c43wDX9-f392zcSNTc1-f39yDc1wDc1xxI3wDX9-f39zhI1EjX2
+EjUSNf39zxI1yDc1-f39-f3LNzUSNTc1-f3MEjXJEsE1-f39-f3KEjU3Nf39zhI1yTcSNf39-f39
+-f3dNzUSwDXHNzXANzX9-f39yzc1NzX7NzX9-csSNxI1yRI1-f34AAAAAAAAAAE=
+:: map/.info.pod
+--[[pod,created="2026-05-26 21:14:32",modified="2026-07-04 18:16:16"]]
+:: map/0.map
+b64$LS1bW3BvZCxjcmVhdGVkPSIyMDI1LTAxLTE3IDEwOjM1OjQ4Iixtb2RpZmllZD0iMjAyNS0w
+MS0xNyAxMDozNzo0NCIscmV2aXNpb249MV1dbHo0AFQAAABEEAAA8Ah7e2JtcD11c2VyZGF0YSgi
+aTE2IiwzMgMALyIwAQD--------------------7oSIpLHBhbl94PTAIANJ5PTAsdGlsZV9oPTE2
+CgBgdz0xNn19
+:: sfx/.info.pod
+--[[pod,created="2026-05-26 21:14:32",modified="2026-07-04 18:16:16"]]
+:: sfx/0.sfx
+b64$LS1bW3BvZCxjcmVhdGVkPSIyMDI1LTA3LTMxIDA4OjMwOjI4Iixtb2RpZmllZD0iMjAyNS0w
+Ny0zMSAwODozMDoyOCIscmV2aXNpb249MF1dbHo0AKAAAAALCgAA-zBweHUAAygAAAQABA9AEAIO
+AAGgASACoA4ADxAADfDKAQIDQA8PkAQFBgdADJAICQoLQAyQDwwPDQ8ODEAM8P8BAOv-J6oBEAYP
+MBABIAEgAfAAAhACDhABIA8hIAEwD0Dwww8oD--wxg-4Cg--D4AP9w8NAfAJARAGDjAA------_9
+H-8BAKzPyA9AAA8QQP--sPD-AQD-6lD-----KQ==
+:: [eoc]
